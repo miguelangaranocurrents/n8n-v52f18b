@@ -574,7 +574,9 @@ export function useWorkflowDocumentNodes(deps: WorkflowDocumentNodesDeps) {
 		invalid: INodeCredentialsDetails;
 		type: string;
 	}) {
-		nodes.value.forEach((node: INodeUi) => {
+		let changed = false;
+
+		nodes.value.forEach((node: INodeUi, index: number) => {
 			const nodeCredentials: INodeCredentials | undefined = (node as unknown as INode).credentials;
 			if (!nodeCredentials?.[data.type]) {
 				return;
@@ -586,21 +588,38 @@ export function useWorkflowDocumentNodes(deps: WorkflowDocumentNodesDeps) {
 				typeof nodeCredentialDetails === 'string' &&
 				nodeCredentialDetails === data.invalid.name
 			) {
-				(node.credentials as INodeCredentials)[data.type] = data.credentials;
+				changed =
+					updateNodeAtIndex(index, {
+						credentials: { ...nodeCredentials, [data.type]: data.credentials },
+					}) || changed;
 				return;
 			}
 
 			if (nodeCredentialDetails.id === null) {
 				if (nodeCredentialDetails.name === data.invalid.name) {
-					(node.credentials as INodeCredentials)[data.type] = data.credentials;
+					changed =
+						updateNodeAtIndex(index, {
+							credentials: { ...nodeCredentials, [data.type]: data.credentials },
+						}) || changed;
 				}
 				return;
 			}
 
 			if (nodeCredentialDetails.id === data.invalid.id) {
-				(node.credentials as INodeCredentials)[data.type] = data.credentials;
+				changed =
+					updateNodeAtIndex(index, {
+						credentials: { ...nodeCredentials, [data.type]: data.credentials },
+					}) || changed;
 			}
 		});
+
+		// This write must mark the document dirty: the follow-up
+		// `updateNodeProperties` for the current node sees no change left (this
+		// function already applied it), so without a dirty event here nothing
+		// schedules the autosave and the replacement never reaches the server.
+		if (changed) {
+			void onStateDirty.trigger();
+		}
 	}
 
 	// Assign credential to all nodes that support it but don't have it set
